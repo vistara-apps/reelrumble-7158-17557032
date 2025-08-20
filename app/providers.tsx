@@ -5,8 +5,8 @@ import { base } from "wagmi/chains";
 import { MiniKitProvider } from "@coinbase/onchainkit/minikit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http } from "wagmi";
-// Import from @coinbase/onchainkit instead of @farcaster/miniapp-sdk
-import { miniAppConnector } from "@coinbase/onchainkit/minikit";
+// Use MiniKitProvider directly from @coinbase/onchainkit
+// No need to import miniAppConnector as it's not exported
 
 // Create a client for React Query
 const queryClient = new QueryClient();

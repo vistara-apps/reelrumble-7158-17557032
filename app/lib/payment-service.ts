@@ -1,6 +1,6 @@
 import { withPaymentInterceptor } from 'x402-axios';
 import axios from 'axios';
-import { type WalletClient } from 'wagmi';
+import { type WalletClient } from 'viem';
 
 // USDC contract address on Base
 const USDC_BASE_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatCurrency } from "../lib/game-logic";
 import { useWalletClient } from "wagmi";
+import { type WalletClient } from "viem";
 import { processPayment } from "../lib/payment-service";
 
 interface PurchaseModalProps {
