@@ -7,15 +7,18 @@ import {
 } from "@coinbase/onchainkit/minikit";
 import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
+import { useWalletClient } from "wagmi";
 import { AppHeader } from "./components/AppHeader";
 import { BalanceDisplay } from "./components/BalanceDisplay";
 import { SlotMachine } from "./components/SlotMachine";
 import { BetControls } from "./components/BetControls";
 import { WinDisplay } from "./components/WinDisplay";
+import PurchaseModal from "./components/PurchaseModal";
 
 export default function App() {
   const { setFrameReady, isFrameReady } = useMiniKit();
   const openUrl = useOpenUrl();
+  const { data: walletClient } = useWalletClient();
 
   // Game state
   const [balance, setBalance] = useState({ gems: 1000, usd: 10.0 });
@@ -23,6 +26,9 @@ export default function App() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [lastWin, setLastWin] = useState(0);
   const [showWin, setShowWin] = useState(false);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [transactions, setTransactions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isFrameReady) {
@@ -54,12 +60,34 @@ export default function App() {
   }, [balance.gems, betAmount, isSpinning]);
 
   const handleBuyGems = useCallback(() => {
-    // Mock gem purchase
-    setBalance(prev => ({ 
-      ...prev, 
-      gems: prev.gems + 500,
-      usd: prev.usd - 5 
-    }));
+    setShowPurchaseModal(true);
+  }, []);
+  
+  const handlePurchase = useCallback(async (amount: number, transactionHash?: string) => {
+    setIsProcessingPayment(true);
+    
+    try {
+      // Calculate gems based on amount (1 USD = 100 gems)
+      const gemsToAdd = amount * 100;
+      
+      // Update balance
+      setBalance(prev => ({
+        ...prev,
+        gems: prev.gems + gemsToAdd
+      }));
+      
+      // Store transaction hash if available
+      if (transactionHash) {
+        setTransactions(prev => [...prev, transactionHash]);
+      }
+      
+      // Close modal
+      setShowPurchaseModal(false);
+    } catch (error) {
+      console.error("Error processing purchase:", error);
+    } finally {
+      setIsProcessingPayment(false);
+    }
   }, []);
 
   return (
@@ -107,6 +135,14 @@ export default function App() {
           Built on Base with MiniKit
         </button>
       </footer>
+      
+      {/* Purchase Modal */}
+      <PurchaseModal
+        isOpen={showPurchaseModal}
+        onClose={() => setShowPurchaseModal(false)}
+        onPurchase={handlePurchase}
+        isProcessing={isProcessingPayment}
+      />
     </div>
   );
 }

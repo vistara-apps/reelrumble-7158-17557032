@@ -1,14 +1,16 @@
-
 "use client";
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatCurrency } from "../lib/game-logic";
+import { useWalletClient } from "wagmi";
+import { type WalletClient } from "viem";
+import { processPayment } from "../lib/payment-service";
 
 interface PurchaseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onPurchase: (amount: number) => void;
+  onPurchase: (amount: number, transactionHash?: string) => void;
   isProcessing: boolean;
 }
 
@@ -21,9 +23,39 @@ const PURCHASE_OPTIONS = [
 
 export default function PurchaseModal({ isOpen, onClose, onPurchase, isProcessing }: PurchaseModalProps) {
   const [selectedAmount, setSelectedAmount] = useState(5);
+  const [error, setError] = useState<string | null>(null);
+  const { data: walletClient } = useWalletClient();
 
-  const handlePurchase = () => {
-    onPurchase(selectedAmount);
+  const handlePurchase = async () => {
+    if (!walletClient) {
+      setError("Wallet not connected. Please connect your wallet.");
+      return;
+    }
+
+    setError(null);
+    
+    try {
+      const result = await processPayment({
+        amount: selectedAmount,
+        walletClient,
+        onSuccess: (hash) => {
+          console.log("Payment successful with hash:", hash);
+        },
+        onError: (err) => {
+          console.error("Payment failed:", err);
+          setError(err.message);
+        }
+      });
+      
+      if (result.success) {
+        onPurchase(selectedAmount, result.transactionHash);
+      } else {
+        setError(result.error?.message || "Payment failed");
+      }
+    } catch (err) {
+      console.error("Unexpected error during payment:", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+    }
   };
 
   return (
@@ -102,8 +134,14 @@ export default function PurchaseModal({ isOpen, onClose, onPurchase, isProcessin
             </div>
 
             <p className="text-xs text-text-muted text-center mt-4">
-              Secure payment via Base network
+              Secure payment via Base network using USDC
             </p>
+            
+            {error && (
+              <div className="mt-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-md text-sm">
+                {error}
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}
