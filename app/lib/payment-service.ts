@@ -1,15 +1,34 @@
-import { createX402Client } from 'x402-axios';
+import { withPaymentInterceptor } from 'x402-axios';
+import axios from 'axios';
 import { type WalletClient } from 'wagmi';
 
 // USDC contract address on Base
 const USDC_BASE_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 // Create x402 client
-const createPaymentClient = () => {
-  return createX402Client({
+const createPaymentClient = (walletClient: WalletClient) => {
+  const axiosInstance = axios.create({
     baseURL: process.env.NEXT_PUBLIC_X402_API_URL || 'https://api.x402.org',
-    apiKey: process.env.NEXT_PUBLIC_X402_API_KEY,
+    headers: {
+      'X-API-KEY': process.env.NEXT_PUBLIC_X402_API_KEY || '',
+    },
   });
+  
+  // Create a wallet adapter for x402
+  const wallet = {
+    getAddress: async () => {
+      const [address] = await walletClient.getAddresses();
+      return address;
+    },
+    signMessage: async (message: string) => {
+      return walletClient.signMessage({ message });
+    },
+    signTransaction: async (transaction: any) => {
+      return walletClient.sendTransaction(transaction);
+    }
+  };
+  
+  return withPaymentInterceptor(axiosInstance, wallet);
 };
 
 export interface PaymentRequest {
@@ -26,7 +45,7 @@ export async function processPayment({
   onError 
 }: PaymentRequest): Promise<{ success: boolean; transactionHash?: string; error?: Error }> {
   try {
-    const x402Client = createPaymentClient();
+    const client = createPaymentClient(walletClient);
     
     // Convert USD amount to USDC (1:1 ratio for simplicity)
     const usdcAmount = amount;
@@ -38,39 +57,23 @@ export async function processPayment({
       throw new Error('No wallet address found');
     }
     
-    // Create payment request
-    const paymentRequest = await x402Client.createPaymentRequest({
+    // Create payment endpoint with x402 payment requirements
+    const paymentEndpoint = `/api/payments/usdc`;
+    
+    // Make the payment request
+    const response = await client.post(paymentEndpoint, {
       token: USDC_BASE_ADDRESS,
       amount: usdcAmount.toString(),
-      from: address,
+      address: address,
     });
     
-    if (!paymentRequest || !paymentRequest.id) {
-      throw new Error('Failed to create payment request');
-    }
-    
-    // Sign and send the transaction
-    const { request } = await x402Client.getTransactionRequest(paymentRequest.id);
-    
-    if (!request) {
-      throw new Error('Failed to get transaction request');
-    }
-    
-    // Send the transaction using the wallet client
-    const hash = await walletClient.sendTransaction({
-      to: request.to as `0x${string}`,
-      data: request.data as `0x${string}`,
-      value: BigInt(request.value || 0),
-    });
-    
-    // Wait for transaction confirmation
-    const receipt = await x402Client.waitForTransactionReceipt(hash);
-    
-    if (receipt.status === 'success') {
-      onSuccess?.(hash);
-      return { success: true, transactionHash: hash };
+    // Check if payment was successful
+    if (response.status === 200 && response.data.success) {
+      const transactionHash = response.data.transactionHash || '';
+      onSuccess?.(transactionHash);
+      return { success: true, transactionHash };
     } else {
-      throw new Error('Transaction failed');
+      throw new Error('Payment failed: ' + (response.data.message || 'Unknown error'));
     }
   } catch (error) {
     console.error('Payment processing error:', error);
@@ -83,22 +86,26 @@ export async function processPayment({
 // Function to check USDC balance
 export async function checkUSDCBalance(walletClient: WalletClient): Promise<number> {
   try {
-    const x402Client = createPaymentClient();
+    const client = createPaymentClient(walletClient);
     const [address] = await walletClient.getAddresses();
     
     if (!address) {
       throw new Error('No wallet address found');
     }
     
-    const balance = await x402Client.getTokenBalance({
-      token: USDC_BASE_ADDRESS,
-      address,
+    const response = await client.get(`/api/balances/${address}`, {
+      params: {
+        token: USDC_BASE_ADDRESS
+      }
     });
     
-    return parseFloat(balance);
+    if (response.status === 200 && response.data.balance) {
+      return parseFloat(response.data.balance);
+    }
+    
+    return 0;
   } catch (error) {
     console.error('Error checking USDC balance:', error);
     return 0;
   }
 }
-
